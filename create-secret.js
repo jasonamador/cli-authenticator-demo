@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+'use strict'
+
 const speakeasy = require('speakeasy')
 const QRCode = require('qrcode')
 const term = require('terminal-kit').terminal

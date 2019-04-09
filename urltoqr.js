@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+'use strict'
+
 const QRCode = require('qrcode')
 const term = require('terminal-kit').terminal
 const imageDataURI = require('image-data-uri')

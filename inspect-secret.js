@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+'use strict'
+
 const speakeasy = require('speakeasy')
 const term = require('terminal-kit').terminal
 const db = require('level')('db')
