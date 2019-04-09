@@ -1,68 +1,96 @@
+#!/usr/bin/env node
+
 'use strict'
 
 const speakeasy = require('speakeasy')
 const QRCode = require('qrcode')
 const term = require('terminal-kit').terminal
-const clipboardy = require('clipboardy')
 const db = require('level')('db')
 const imageDataURI = require('image-data-uri')
 
 const main = async function () {
-  let names = []
+  await initialize()
+}
 
+const initialize = async function () {
+  let labels = []
   let keys = db.createKeyStream()
   keys.on('data', function (key) {
-    names.push(key)
+    labels.push(key)
   })
   keys.on('end', async function () {
-    await termApp(names)
-    process.exit(0)
+    try {
+      await termApp(labels)
+    } catch(err) {
+      term.red(`ERROR: ${err}\n`)
+      process.exit(0)
+    }
   })
 }
 
-const chooseKey = async function (names) {
-  let items = ['Create New', ...names]
-
+const chooseSecret = async function (labels) {
+  let items = ['Create New', ...labels]
   return await term.singleColumnMenu(items).promise
 }
 
-const termApp = async function (names) {
-  term('2FA TEST APP\n')
-  // initial menu
-  let choice = await chooseKey(names)
+const mainMenu = async function() {
+  term('OTPAUTH TEST APP\n')
+  let items = ['CREATE NEW OTPAUTH SECRET', 'VERIFY OTP', 'INSPECT SECRET', 'QR CODE FROM URL']
+  return await term.singleColumnMenu(items)
+}
 
-  let secret, name, secret32
+const termApp = async function (labels) {
+  // initial menu
+  let choice = await chooseSecret(labels)
+
+  let secret, label, issuer
 
   if (choice.selectedIndex === 0) {
-    term('Name for Authenticator: ')
-    name = await term.inputField().promise
-    secret = speakeasy.generateSecret({length: 20, name})
-    secret.otpauth_url += '&issuer=CLI%20Test'
-    secret32 = secret.base32
+    // create a new secret
+    term('Issuer: ')
+    let _issuer = await term.inputField().promise
+    term('\n')
+    term('Name: ')
+    label = await term.inputField().promise
+    secret = speakeasy.generateSecret({length: 20, name: label})
+    secret.otpauth_url += `&issuer=CLI%20Test`
 
-    await db.put(name, secret32)
-    term.green(`\nPUT - ${name}: ${secret32}\n`)
-    let imgUri = await QRCode.toDataURL(secret.otpauth_url, {scale: 2})
-    let path = await imageDataURI.outputFile(imgUri, `./qrs/${name}.png`)
-
-    await term.drawImage(path)
+    term.yellow(`otpauth url: ${secret.otpauth_url.replace('%20', ' ')}\n`)
 
     try {
-      await clipboardy.write(imgUri)
-      term('QRCode URI copied \n')
+      await db.put(label, JSON.stringify(secret))
+      term.green(`\nPUT - ${label}: ${secret.base32}\n`)
+      let imgUri = await QRCode.toDataURL(secret.otpauth_url, {scale: 2})
+      let path = await imageDataURI.outputFile(imgUri, `./qrs/${label}.png`)
+      await term.drawImage(path)
     } catch (err) {
-      console.log(err)
+      term.red(`ERROR: ${err}\n`)
+      process.exit(0)
     }
   } else {
-    name = choice.selectedText
-    secret32 = await db.get(name)
+    // choose a secret
+    label = choice.selectedText
+    try {
+      let _secret = await db.get(label)
+      secret = JSON.parse(_secret)
+      term.yellow(`otpauth url: ${secret.otpauth_url.replace('%20', ' ')}\n`)
+    } catch (err) {
+      term.red(`ERROR: ${err}\n`)
+      process.exit(0)
+    }
   }
 
-  term(`Enter the 2fa code for ${name}: `)
+  let token = speakeasy.totp({
+    secret: secret.base32,
+    encoding: 'base32'
+  })
+  term(`TOTP: ${token}\n`)
+
+  term(`Enter the TOTP for ${label}: `)
   let userToken = await term.inputField().promise
 
   let verified = speakeasy.totp.verify({
-    secret: secret32,
+    secret: secret.base32,
     encoding: 'base32',
     token: userToken
   })
@@ -72,7 +100,7 @@ const termApp = async function (names) {
   } else {
     term.red(`\nNot Verified!\n`)
   }
-  process.exit()
+  process.exit(0)
 }
 
 main()
