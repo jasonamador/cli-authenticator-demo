@@ -34,9 +34,9 @@ const exec = async function(keys) {
   let secret
   try {
     let _secret = await db.get(choice.selectedText)
-    secret = JSON.stringify(JSON.parse(_secret), null, 2);w
+    secret = JSON.parse(_secret)
     secret.label = choice.selectedText
-    term.green(secret)
+    term.green(JSON.stringify(secret, null, 2))
   } catch (err) {
     term.red(`ERROR: ${err}\n`)
     term.processExit(0)
